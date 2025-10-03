@@ -19,19 +19,23 @@ def ensure_dir(path: Path) -> Path:
     return path
 
 
-def write_file(path: Path, content: str) -> None:
+def write_file(path: Path, content: str) -> Path:
     """
     Write content to file
 
     Args:
         path: File path
         content: File content
+
+    Returns:
+        Path object
     """
     # Ensure parent directory exists
     ensure_dir(path.parent)
 
     # Write file
     path.write_text(content, encoding='utf-8')
+    return path
 
 
 def read_file(path: Path) -> Optional[str]:

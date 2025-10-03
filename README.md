@@ -1,6 +1,19 @@
 # ATAMS - Advanced Toolkit for Application Management System
 
-Universal toolkit untuk semua AURA (Atams Universal Runtime Architecture) projects.
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Python](https://img.shields.io/badge/python-3.9+-green)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
+Universal toolkit untuk semua **AURA (Atams Universal Runtime Architecture)** projects.
+
+## Features
+
+- 🚀 **Instant CRUD Generation** - Generate full boilerplate in seconds
+- 🏗️ **Clean Architecture** - Enforced separation of concerns  
+- 🔒 **Security by Default** - Atlas SSO, encryption, RBAC
+- 📦 **Reusable Components** - Database, middleware, logging, etc.
+- 🎨 **CLI Tool** - Project initialization & code generation
+- 🌐 **CORS Protection** - Default to `*.atamsindonesia.com`
 
 ## Installation
 
@@ -10,130 +23,247 @@ pip install atams
 
 ## Quick Start
 
-### Initialize New Project
+### 1. Initialize New Project
 
 ```bash
-atams init my-aura-app
-cd my-aura-app
+atams init my-app
+cd my-app
 cp .env.example .env
+# Edit .env with your configuration
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-### Generate CRUD
+### 2. Generate CRUD
 
 ```bash
-cd my-aura-app
 atams generate department
 ```
 
-This creates:
-- Model (SQLAlchemy)
-- Schema (Pydantic)
-- Repository (data access)
-- Service (business logic)
-- Endpoint (API routes)
+Generates:
+- ✅ Model (SQLAlchemy)
+- ✅ Schema (Pydantic)
+- ✅ Repository (data access)
+- ✅ Service (business logic)
+- ✅ Endpoint (API routes)
+- ✅ Auto-registered to `api.py`
 
-And auto-registers the router to `api.py`!
+### 3. Customize & Run
+
+Edit generated files to add custom logic, then test:
+
+```bash
+# Access API docs
+http://localhost:8000/docs
+
+# Test endpoints
+GET  /api/v1/departments
+GET  /api/v1/departments/{id}
+POST /api/v1/departments
+PUT  /api/v1/departments/{id}
+DELETE /api/v1/departments/{id}
+```
+
+## Components
+
+### Core Components
+
+1. **Database Layer** - BaseRepository with ORM & Native SQL
+2. **Atlas SSO** - Authentication & authorization
+3. **Response Encryption** - AES-256 for GET endpoints
+4. **Exception Handling** - Standardized error responses
+5. **Middleware** - Request ID tracking, rate limiting
+6. **Logging** - Structured logging with JSON format
+7. **Transaction Management** - Context managers for complex operations
+8. **Common Schemas** - Response & pagination schemas
+
+### Configuration
+
+ATAMS provides `AtamsBaseSettings` with sensible defaults:
+
+```python
+from atams import AtamsBaseSettings
+
+class Settings(AtamsBaseSettings):
+    APP_NAME: str = "MyApp"
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = True
+    
+    # App-specific encryption
+    ENCRYPTION_KEY: str = "your-key-32-chars"
+    ENCRYPTION_IV: str = "your-iv-16-char"
+
+settings = Settings()
+```
+
+**CORS Default:** Hanya `*.atamsindonesia.com` + localhost (development)
+
+Override via `.env`:
+
+```env
+CORS_ORIGINS=["https://myapp.atamsindonesia.com"]
+```
 
 ## CLI Commands
 
 ### `atams init <project_name>`
 
-Initialize a new AURA project with proper structure.
+Initialize new AURA project with complete structure.
 
 **Options:**
-- `--app-name, -a`: Application name (default: project_name)
-- `--version, -v`: Application version (default: 1.0.0)
-- `--schema, -s`: Database schema name (default: aura)
+- `--app-name, -a` - Application name (default: project_name)
+- `--version, -v` - Application version (default: 1.0.0)
+- `--schema, -s` - Database schema (default: aura)
 
 **Example:**
+
 ```bash
-atams init my-app --app-name "My Application" --schema myapp
+atams init my-new-app
 ```
 
-### `atams generate <resource_name>`
+### `atams generate <resource>`
 
 Generate full CRUD boilerplate for a resource.
 
 **Options:**
-- `--schema, -s`: Database schema name (default: aura)
-- `--skip-api`: Skip auto-registration to api.py
+- `--schema, -s` - Database schema (default: aura)
+- `--skip-api` - Skip auto-registration to api.py
 
 **Example:**
+
 ```bash
 atams generate department
-atams generate user_profile --schema myapp
+atams generate user --schema=public
 ```
 
-**Generated files:**
-- `app/models/{resource}.py`
-- `app/schemas/{resource}.py`
-- `app/repositories/{resource}_repository.py`
-- `app/services/{resource}_service.py`
-- `app/api/v1/endpoints/{resources}.py`
+### `atams --version`
 
-## Components
+Show toolkit version.
 
-### 1. Database Layer
+## Project Structure
 
-- BaseRepository (ORM + Native SQL)
-- Session management
-- Base declarative
+```
+my-app/
+├── app/
+│   ├── core/              # Configuration
+│   │   └── config.py
+│   ├── db/                # Database
+│   ├── models/            # SQLAlchemy models
+│   ├── schemas/           # Pydantic schemas
+│   ├── repositories/      # Data access layer
+│   ├── services/          # Business logic layer
+│   └── api/               # API endpoints
+│       └── v1/
+│           ├── api.py
+│           └── endpoints/
+├── tests/                 # Test files
+├── .env.example           # Environment template
+├── requirements.txt       # Dependencies
+└── README.md
+```
 
-### 2. Atlas SSO Integration
+## Usage Examples
 
-- AtlasClient
-- Authentication dependencies
-- Encryption/decryption
+### Using BaseRepository
 
-### 3. Response Encryption
+```python
+from atams import BaseRepository
+from app.models.user import User
 
-- AES-256 encryption
-- Auto-encryption untuk GET endpoints
+class UserRepository(BaseRepository[User]):
+    def __init__(self):
+        super().__init__(User)
+    
+    # ORM methods (inherited)
+    # - get(db, id)
+    # - get_multi(db, skip, limit)
+    # - create(db, obj_in)
+    # - update(db, db_obj, obj_in)
+    # - delete(db, id)
+    
+    # Custom native SQL
+    def get_active_users(self, db):
+        query = "SELECT * FROM users WHERE status = :status"
+        return self.execute_raw_sql_dict(db, query, {"status": "active"})
+```
 
-### 4. Exception Handling
+### Using Atlas SSO
 
-- Custom exceptions
-- Global exception handlers
+```python
+from atams.sso import require_auth, require_min_role_level
 
-### 5. Middleware
+@router.get("/admin", dependencies=[Depends(require_min_role_level(50))])
+async def admin_dashboard(current_user: dict = Depends(require_auth)):
+    # Only users with role level >= 50 can access
+    return {"user": current_user}
+```
 
-- Request ID tracking
-- Rate limiting
+### Using Response Encryption
 
-### 6. Logging
+```python
+from atams.encryption import encrypt_response_data
+from atams.schemas import DataResponse
 
-- Structured logging
-- JSON formatter
-- Colored console
-
-### 7. Transaction Management
-
-- Context managers
-- Savepoints
-
-### 8. Common Schemas
-
-- Response schemas
-- Pagination
+@router.get("/users/{user_id}")
+async def get_user(user_id: int):
+    user = get_user_from_db(user_id)
+    response = DataResponse(
+        success=True,
+        message="User retrieved",
+        data=user
+    )
+    # Auto-encrypt if ENCRYPTION_ENABLED=true
+    return encrypt_response_data(response)
+```
 
 ## Development
 
-For local development:
+### Setup
 
 ```bash
-git clone <repo>
-cd atams
-python -m venv venv
-venv\Scripts\activate  # Windows
-pip install -e .
+git clone https://github.com/atams/atams-toolkit
+cd atams-toolkit
+pip install -e ".[dev]"
 ```
 
-## Documentation
+### Run Tests
 
-See `atams.md` for complete specification.
+```bash
+pytest tests/ -v
+pytest tests/ --cov=atams --cov-report=html
+```
 
-## Version
+### Build Package
 
-0.2.0 (Phase 2 - CLI Generator + Project Initializer)
+```bash
+python -m build
+```
+
+## Versioning
+
+ATAMS follows [Semantic Versioning](https://semver.org/):
+
+- **MAJOR** version for incompatible API changes
+- **MINOR** version for new functionality (backwards compatible)
+- **PATCH** version for bug fixes
+
+Current version: **1.0.0**
+
+## Contributing
+
+Contributions welcome! Please read CONTRIBUTING.md first.
+
+## License
+
+MIT License - see LICENSE file for details.
+
+## Links
+
+- Documentation: [https://atams-toolkit.readthedocs.io](https://atams-toolkit.readthedocs.io/)
+- GitHub: [https://github.com/atams/atams-toolkit](https://github.com/atams/atams-toolkit)
+- PyPI: [https://pypi.org/project/atams](https://pypi.org/project/atams)
+- Issues: [https://github.com/atams/atams-toolkit/issues](https://github.com/atams/atams-toolkit/issues)
+
+## Support
+
+For support, email [support@atamsindonesia.com](mailto:support@atamsindonesia.com) or open an issue on GitHub.
