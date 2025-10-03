@@ -221,8 +221,8 @@ async def get_user(user_id: int):
 ### Setup
 
 ```bash
-git clone https://github.com/atams/atams-toolkit
-cd atams-toolkit
+git clone https://github.com/GratiaManullang03/atams.git
+cd atams
 pip install -e ".[dev]"
 ```
 
