@@ -8,7 +8,10 @@ Can be disabled via ENCRYPTION_ENABLED=false in .env
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 import base64
-from typing import Any, Dict
+from typing import Any, Dict, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from atams.config.base import AtamsBaseSettings
 
 
 class ResponseEncryption:
@@ -50,59 +53,61 @@ class ResponseEncryption:
         return unpad(decrypted, AES.block_size).decode('utf-8')
 
 
-def create_response_encryption(encryption_key: str, encryption_iv: str):
-    """Factory function untuk create ResponseEncryption"""
-    return ResponseEncryption(encryption_key, encryption_iv)
-
-
-def create_encrypt_response_function(encryption_enabled: bool, encryption: ResponseEncryption):
+def get_encryption_instance(settings: 'AtamsBaseSettings') -> ResponseEncryption:
     """
-    Factory function untuk create encrypt_response_data dengan closure
+    Get or create encryption instance
 
     Args:
-        encryption_enabled: Flag untuk enable/disable encryption
-        encryption: Instance dari ResponseEncryption
+        settings: Application settings instance
 
     Returns:
-        Function untuk encrypt response data
+        ResponseEncryption instance
     """
-    def encrypt_response_data(response_data: Any) -> Dict[str, Any]:
-        """
-        Encrypt response data for GET endpoints
+    return ResponseEncryption(settings.ENCRYPTION_KEY, settings.ENCRYPTION_IV)
 
-        Args:
-            response_data: Response object to encrypt
 
-        Returns:
-            Dict with encrypted data field
+def encrypt_response_data(response_data: Any, settings: 'AtamsBaseSettings') -> Dict[str, Any]:
+    """
+    Encrypt response data for GET endpoints
 
-        Example:
-            response = DataResponse(success=True, message="Success", data=user_data)
-            if encryption_enabled:
-                return encrypt_response_data(response)
-            return response
-        """
-        if not encryption_enabled:
-            return response_data
+    Simple singleton-like pattern for easy use in endpoints.
+    Automatically checks ENCRYPTION_ENABLED setting.
 
-        # Convert response to JSON string
-        # Use model_dump_json() if available (Pydantic v2), else model_dump with mode='json'
-        if hasattr(response_data, 'model_dump_json'):
-            json_data = response_data.model_dump_json()
-        elif hasattr(response_data, 'model_dump'):
-            import json
-            json_data = json.dumps(response_data.model_dump(mode='json'))
-        else:
-            import json
-            json_data = json.dumps(response_data, default=str)
+    Args:
+        response_data: Response object to encrypt (Pydantic model or dict)
+        settings: Application settings instance
 
-        # Encrypt
-        encrypted = encryption.encrypt(json_data)
+    Returns:
+        Dict with encrypted data field if enabled, otherwise original data
 
-        # Return wrapped response
-        return {
-            "encrypted": True,
-            "data": encrypted
-        }
+    Example:
+        from app.core.config import settings
+        from atams.encryption import encrypt_response_data
 
-    return encrypt_response_data
+        response = DataResponse(success=True, message="Success", data=user_data)
+        return encrypt_response_data(response, settings)
+    """
+    if not settings.ENCRYPTION_ENABLED:
+        return response_data
+
+    # Get encryption instance
+    encryption = get_encryption_instance(settings)
+
+    # Convert response to JSON string
+    if hasattr(response_data, 'model_dump_json'):
+        json_data = response_data.model_dump_json()
+    elif hasattr(response_data, 'model_dump'):
+        import json
+        json_data = json.dumps(response_data.model_dump(mode='json'))
+    else:
+        import json
+        json_data = json.dumps(response_data, default=str)
+
+    # Encrypt
+    encrypted = encryption.encrypt(json_data)
+
+    # Return wrapped response
+    return {
+        "encrypted": True,
+        "data": encrypted
+    }

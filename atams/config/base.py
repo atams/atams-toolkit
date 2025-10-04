@@ -18,6 +18,11 @@ class AtamsBaseSettings(BaseSettings):
     ATLAS_ENCRYPTION_KEY: str = "atams_apps_secret_key_goes_here"  # DEFAULT
     ATLAS_ENCRYPTION_IV: str = "atams_apps_iv!!"  # DEFAULT
 
+    # Response Encryption (app-specific)
+    ENCRYPTION_ENABLED: bool = False
+    ENCRYPTION_KEY: str = "change_me_32_characters_long!!"  # Must be 32 chars
+    ENCRYPTION_IV: str = "change_me_16char"  # Must be 16 chars
+
     # Logging (common pattern dengan defaults)
     LOGGING_ENABLED: bool = True
     LOG_LEVEL: str = "INFO"
