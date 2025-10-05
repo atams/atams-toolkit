@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="atams",
-    version="1.1.0",
+    version="1.1.1",
     description="Advanced Toolkit for Application Management System",
     author="ATAMS Team",
     packages=find_packages(),

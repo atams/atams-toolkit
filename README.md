@@ -344,11 +344,10 @@ MIT License - see LICENSE file for details.
 
 ## Links
 
-- Documentation: [https://atams-toolkit.readthedocs.io](https://atams-toolkit.readthedocs.io/)
-- GitHub: [https://github.com/atams/atams-toolkit](https://github.com/atams/atams-toolkit)
+- GitHub: [https://github.com/GratiaManullang03/atams](https://github.com/GratiaManullang03/atams)
 - PyPI: [https://pypi.org/project/atams](https://pypi.org/project/atams)
-- Issues: [https://github.com/atams/atams-toolkit/issues](https://github.com/atams/atams-toolkit/issues)
+- Issues: [https://github.com/GratiaManullang03/atams/issues](https://github.com/GratiaManullang03/atams/issues)
 
 ## Support
 
-For support, email [support@atamsindonesia.com](mailto:support@atamsindonesia.com) or open an issue on GitHub.
+For support, email [support@gratiamanullang03@gmail.com](mailto:gratiamanullang03@gmail.com) or open an issue on GitHub.

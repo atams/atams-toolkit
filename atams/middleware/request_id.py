@@ -39,10 +39,8 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         # Add to request state
         request.state.request_id = request_id
 
-        # Create logger with request context (if available)
-        request_logger = None
-        if logger and LoggerAdapter:
-            request_logger = LoggerAdapter(logger, {"request_id": request_id})
+        # Use logger directly (if available)
+        request_logger = logger
 
         # Log incoming request
         start_time = time.time()

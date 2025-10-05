@@ -5,6 +5,12 @@ All notable changes to the ATAMS toolkit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2025-01-10
+
+### Fixed
+- Fixed undefined `LoggerAdapter` reference in `atams/middleware/request_id.py` causing flake8 F821 errors
+- Simplified logger usage by removing unnecessary LoggerAdapter wrapper
+
 ## [1.1.0] - 2025-01-10
 
 ### Added
@@ -120,5 +126,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Upgrade Guide
 When upgrading between versions, check the "Changed" and "Breaking Changes" sections for any required modifications to your code.
 
-[1.1.0]: https://github.com/atams/atams-toolkit/releases/tag/v1.1.0
-[1.0.0]: https://github.com/atams/atams-toolkit/releases/tag/v1.0.0
+[1.1.0]: https://github.com/GratiaManullang03/atams/releases/tag/v1.1.0
+[1.0.0]: https://github.com/GratiaManullang03/atams/releases/tag/v1.0.0
