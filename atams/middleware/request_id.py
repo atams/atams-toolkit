@@ -1,19 +1,26 @@
 """
-Middleware for Request ID tracking
+Middleware for ATAMS
 - Request ID tracking
 - Request/Response logging
 - Request timing
 """
 import time
 import uuid
-from typing import Callable
+from typing import Callable, Optional
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from atams.logging import get_logger, LoggerAdapter
+# Optional logger - will work without it
+logger: Optional['LoggerAdapter'] = None
+LoggerAdapter = None
 
-logger = get_logger(__name__)
+try:
+    from atams.logging import get_logger, LoggerAdapter as LA
+    logger = get_logger(__name__)
+    LoggerAdapter = LA
+except ImportError:
+    pass
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -34,33 +41,37 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         # Add to request state
         request.state.request_id = request_id
 
-        # Create logger with request context
-        request_logger = LoggerAdapter(logger, {"request_id": request_id})
+        # Create logger with request context (if available)
+        request_logger = None
+        if logger and LoggerAdapter:
+            request_logger = LoggerAdapter(logger, {"request_id": request_id})
 
         # Log incoming request
         start_time = time.time()
-        request_logger.info(
-            f"Request started: {request.method} {request.url.path}",
-            extra={
-                'extra_data': {
-                    'method': request.method,
-                    'path': request.url.path,
-                    'client_ip': request.client.host if request.client else None,
-                    'user_agent': request.headers.get('user-agent', 'unknown')
+        if request_logger:
+            request_logger.info(
+                f"Request started: {request.method} {request.url.path}",
+                extra={
+                    'extra_data': {
+                        'method': request.method,
+                        'path': request.url.path,
+                        'client_ip': request.client.host if request.client else None,
+                        'user_agent': request.headers.get('user-agent', 'unknown')
+                    }
                 }
-            }
-        )
+            )
 
         # Process request
         try:
             response = await call_next(request)
         except Exception as e:
             # Log exception
-            request_logger.error(
-                f"Request failed with exception: {str(e)}",
-                exc_info=True,
-                extra={'extra_data': {'exception_type': type(e).__name__}}
-            )
+            if request_logger:
+                request_logger.error(
+                    f"Request failed with exception: {str(e)}",
+                    exc_info=True,
+                    extra={'extra_data': {'exception_type': type(e).__name__}}
+                )
             raise
 
         # Calculate processing time
@@ -71,14 +82,15 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         response.headers["X-Process-Time"] = f"{process_time:.4f}s"
 
         # Log response
-        request_logger.info(
-            f"Request completed: {response.status_code} in {process_time:.4f}s",
-            extra={
-                'extra_data': {
-                    'status_code': response.status_code,
-                    'process_time': f"{process_time:.4f}s"
+        if request_logger:
+            request_logger.info(
+                f"Request completed: {response.status_code} in {process_time:.4f}s",
+                extra={
+                    'extra_data': {
+                        'status_code': response.status_code,
+                        'process_time': f"{process_time:.4f}s"
+                    }
                 }
-            }
-        )
+            )
 
         return response

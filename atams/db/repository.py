@@ -60,7 +60,7 @@ IMPORTANT PATTERNS:
 """
 from typing import TypeVar, Generic, Type, Optional, List, Any, Dict
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text
+from sqlalchemy import func, text, inspect
 
 from atams.db.base import Base
 
@@ -71,10 +71,19 @@ class BaseRepository(Generic[ModelType]):
     """
     Base repository for database operations
     Supports both ORM and Native SQL approaches
+    Hybrid: Use ORM for simple operations, Native SQL for complex queries
     """
 
     def __init__(self, model: Type[ModelType]):
         self.model = model
+        # Get primary key column name dynamically
+        self._pk_column = self._get_primary_key_column()
+
+    def _get_primary_key_column(self):
+        """Get primary key column name from model"""
+        mapper = inspect(self.model)
+        pk_columns = [col.name for col in mapper.primary_key]
+        return pk_columns[0] if pk_columns else 'id'
 
     # ==================== ORM METHODS ====================
 
@@ -88,8 +97,12 @@ class BaseRepository(Generic[ModelType]):
 
         Returns:
             Model instance or None if not found
+
+        Example:
+            user = user_repo.get(db, 1)
         """
-        return db.query(self.model).filter(self.model.u_id == id).first()
+        pk_attr = getattr(self.model, self._pk_column)
+        return db.query(self.model).filter(pk_attr == id).first()
 
     def get_multi(
         self,
@@ -170,8 +183,12 @@ class BaseRepository(Generic[ModelType]):
 
         Returns:
             Deleted model instance or None if not found
+
+        Example:
+            deleted_user = user_repo.delete(db, user_id=1)
         """
-        obj = db.query(self.model).filter(self.model.u_id == id).first()
+        pk_attr = getattr(self.model, self._pk_column)
+        obj = db.query(self.model).filter(pk_attr == id).first()
         if obj:
             db.delete(obj)
             db.commit()
@@ -186,8 +203,12 @@ class BaseRepository(Generic[ModelType]):
 
         Returns:
             Total count
+
+        Example:
+            total_users = user_repo.count(db)
         """
-        return db.query(func.count(self.model.u_id)).scalar()
+        pk_attr = getattr(self.model, self._pk_column)
+        return db.query(func.count(pk_attr)).scalar()
 
     # ==================== NATIVE SQL METHODS ====================
 

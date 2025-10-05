@@ -1,10 +1,10 @@
 """
-Transaction Management Utilities
+Transaction Management Utilities for ATAMS
 
 Provides explicit transaction control for complex operations
 that require multiple database operations to succeed or fail together.
 
-USAGE PATTERNS:
+USAGE PATTERNS (in user project):
 
 1. AUTOMATIC COMMIT (ORM Methods):
    ```python
@@ -38,13 +38,17 @@ USAGE PATTERNS:
    ```
 """
 from contextlib import contextmanager
-from typing import Generator
+from typing import Generator, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from atams.logging import get_logger
-
-logger = get_logger(__name__)
+# Optional logger - will work without it
+logger: Optional['LoggerAdapter'] = None
+try:
+    from atams.logging import get_logger
+    logger = get_logger(__name__)
+except ImportError:
+    pass
 
 
 class Transaction:
@@ -64,14 +68,16 @@ class Transaction:
         if not self.rolled_back:
             self.db.commit()
             self.committed = True
-            logger.debug("Transaction committed")
+            if logger:
+                logger.debug("Transaction committed")
 
     def rollback(self):
         """Rollback transaction"""
         if not self.committed:
             self.db.rollback()
             self.rolled_back = True
-            logger.debug("Transaction rolled back")
+            if logger:
+                logger.debug("Transaction rolled back")
 
 
 @contextmanager
@@ -92,7 +98,7 @@ def transaction(db: Session) -> Generator[Transaction, None, None]:
 
     Example:
         ```python
-        from atams.transaction import transaction
+        from app.core.transaction import transaction
 
         with transaction(db) as tx:
             # Multiple operations
@@ -119,7 +125,8 @@ def transaction(db: Session) -> Generator[Transaction, None, None]:
         # Auto-rollback on exception
         if not tx.rolled_back:
             tx.rollback()
-            logger.error(f"Transaction rolled back due to exception: {str(e)}")
+            if logger:
+                logger.error(f"Transaction rolled back due to exception: {str(e)}")
         raise
 
 
@@ -149,7 +156,6 @@ def savepoint(db: Session, name: str = "savepoint") -> Generator[None, None, Non
                     repo.execute_raw_sql(db, "UPDATE ...", params)
                 except Exception:
                     # Rolls back to savepoint, user insert is preserved
-                    logger.error("Update failed, rolling back to savepoint")
                     raise
 
             # Continue with other operations
@@ -157,7 +163,8 @@ def savepoint(db: Session, name: str = "savepoint") -> Generator[None, None, Non
     """
     # Create savepoint
     db.execute(text("SAVEPOINT :name"), {"name": name})
-    logger.debug(f"Savepoint created: {name}")
+    if logger:
+        logger.debug(f"Savepoint created: {name}")
 
     try:
         yield
@@ -165,10 +172,12 @@ def savepoint(db: Session, name: str = "savepoint") -> Generator[None, None, Non
     except Exception as e:
         # Rollback to savepoint
         db.execute(f"ROLLBACK TO SAVEPOINT {name}")
-        logger.error(f"Rolled back to savepoint {name}: {str(e)}")
+        if logger:
+            logger.error(f"Rolled back to savepoint {name}: {str(e)}")
         raise
 
     finally:
         # Release savepoint
         db.execute(f"RELEASE SAVEPOINT {name}")
-        logger.debug(f"Savepoint released: {name}")
+        if logger:
+            logger.debug(f"Savepoint released: {name}")

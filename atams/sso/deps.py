@@ -1,25 +1,41 @@
 """
 API Dependencies
 Handles authentication and authorization via Atlas SSO
+
+Usage in user project (app/api/deps.py):
+    from atams.sso import create_atlas_client, create_auth_dependencies
+    from app.core.config import settings
+
+    atlas_client = create_atlas_client(settings)
+    get_current_user, require_auth, require_min_role_level, require_role_level = create_auth_dependencies(atlas_client)
 """
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING, Callable, Tuple
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+if TYPE_CHECKING:
+    from atams.sso.client import AtlasClient
 
 # JWT Bearer token security
 security = HTTPBearer(auto_error=False)
 
 
-def create_auth_dependencies(atlas_client):
+def create_auth_dependencies(atlas_client: 'AtlasClient') -> Tuple[Callable, Callable, Callable, Callable]:
     """
-    Factory untuk create auth dependencies dengan atlas_client
+    Create authentication dependency functions with configured atlas_client
 
     Args:
-        atlas_client: Instance dari AtlasClient
+        atlas_client: Configured AtlasClient instance
 
     Returns:
-        Dict dengan auth dependency functions
+        Tuple of (get_current_user, require_auth, require_min_role_level, require_role_level)
+
+    Example:
+        from atams.sso import create_atlas_client, create_auth_dependencies
+        from app.core.config import settings
+
+        atlas_client = create_atlas_client(settings)
+        get_current_user, require_auth, require_min_role_level, require_role_level = create_auth_dependencies(atlas_client)
     """
 
     async def get_current_user(
@@ -176,9 +192,4 @@ def create_auth_dependencies(atlas_client):
 
         return _check_min_level
 
-    return {
-        "get_current_user": get_current_user,
-        "require_auth": require_auth,
-        "require_role_level": require_role_level,
-        "require_min_role_level": require_min_role_level,
-    }
+    return get_current_user, require_auth, require_min_role_level, require_role_level

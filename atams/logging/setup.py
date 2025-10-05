@@ -1,5 +1,5 @@
 """
-Logging System
+Logging System for AURA v2
 Configurable structured logging with request tracking
 
 Features:
@@ -14,8 +14,11 @@ import logging
 import sys
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 import json
+
+if TYPE_CHECKING:
+    from atams.config.base import AtamsBaseSettings
 
 
 class ColoredFormatter(logging.Formatter):
@@ -66,41 +69,41 @@ class JSONFormatter(logging.Formatter):
 
 
 def setup_logging(
-    enabled: bool = True,
-    level: str = "INFO",
+    logging_enabled: bool = True,
+    log_level: str = "INFO",
+    debug: bool = False,
     log_to_file: bool = False,
-    log_file_path: str = "logs/app.log",
-    debug: bool = False
+    log_file_path: Optional[str] = None
 ):
     """
-    Setup logging configuration
+    Setup logging configuration with provided parameters
 
     Args:
-        enabled: Enable/disable logging
-        level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        logging_enabled: Enable/disable logging
+        log_level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        debug: Debug mode (colored output vs JSON)
         log_to_file: Enable file logging
         log_file_path: Path to log file
-        debug: Debug mode (colored console output)
 
     Creates two handlers:
     1. Console handler - Colored output for development
     2. File handler - JSON structured logs for production
     """
-    if not enabled:
+    if not logging_enabled:
         # Disable all logging
         logging.disable(logging.CRITICAL)
         return
 
     # Get root logger
     logger = logging.getLogger()
-    logger.setLevel(getattr(logging, level))
+    logger.setLevel(getattr(logging, log_level))
 
     # Remove existing handlers
     logger.handlers.clear()
 
     # Console Handler (Colored for development)
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(getattr(logging, level))
+    console_handler.setLevel(getattr(logging, log_level))
 
     if debug:
         # Development: Colored output
@@ -116,7 +119,7 @@ def setup_logging(
     logger.addHandler(console_handler)
 
     # File Handler (JSON for production)
-    if log_to_file:
+    if log_to_file and log_file_path:
         log_dir = Path(log_file_path).parent
         log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -126,14 +129,25 @@ def setup_logging(
         logger.addHandler(file_handler)
 
 
-def setup_logging_from_settings(settings):
-    """Setup logging dari settings object"""
-    return setup_logging(
-        enabled=settings.LOGGING_ENABLED,
-        level=settings.LOG_LEVEL,
+def setup_logging_from_settings(settings: 'AtamsBaseSettings'):
+    """
+    Setup logging from settings object
+
+    Args:
+        settings: Settings instance with LOGGING_* config
+
+    Example:
+        from atams.logging import setup_logging_from_settings
+        from app.core.config import settings
+
+        setup_logging_from_settings(settings)
+    """
+    setup_logging(
+        logging_enabled=settings.LOGGING_ENABLED,
+        log_level=settings.LOG_LEVEL,
+        debug=settings.DEBUG,
         log_to_file=settings.LOG_TO_FILE,
-        log_file_path=settings.LOG_FILE_PATH,
-        debug=settings.DEBUG
+        log_file_path=settings.LOG_FILE_PATH
     )
 
 

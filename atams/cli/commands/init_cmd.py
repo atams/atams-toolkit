@@ -78,7 +78,6 @@ def init_project(
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.models import SecuritySchemeType, HTTPBearer
 from atams.db import init_database
 from atams.logging import setup_logging_from_settings
 from atams.middleware import RequestIDMiddleware
@@ -93,47 +92,16 @@ setup_logging_from_settings(settings)
 # Initialize database
 init_database(settings.DATABASE_URL, settings.DEBUG)
 
-# Create FastAPI app with Bearer token security
+# Create FastAPI app
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     debug=settings.DEBUG,
+    description="AURA Application with Atlas SSO Integration",
     swagger_ui_parameters={{
         "persistAuthorization": True,
     }},
 )
-
-# Add security scheme for Swagger UI
-app.openapi_schema = None  # Reset to regenerate with security
-
-
-def custom_openapi():
-    if app.openapi_schema:
-        return app.openapi_schema
-
-    from fastapi.openapi.utils import get_openapi
-
-    openapi_schema = get_openapi(
-        title=settings.APP_NAME,
-        version=settings.APP_VERSION,
-        routes=app.routes,
-    )
-
-    # Add Bearer token security scheme
-    openapi_schema["components"]["securitySchemes"] = {{
-        "BearerAuth": {{
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT",
-            "description": "Enter your Atlas SSO JWT token"
-        }}
-    }}
-
-    app.openapi_schema = openapi_schema
-    return app.openapi_schema
-
-
-app.openapi = custom_openapi
 
 # CORS middleware
 app.add_middleware(
@@ -154,13 +122,15 @@ setup_exception_handlers(app)
 app.include_router(api_router, prefix="/api/v1")
 
 
-@app.get("/")
+@app.get("/", tags=["Root"])
 async def root():
+    """API Root - Basic information"""
     return {{"name": settings.APP_NAME, "version": settings.APP_VERSION}}
 
 
-@app.get("/health")
+@app.get("/health", tags=["Health"])
 async def health():
+    """Health check endpoint"""
     return {{"status": "ok"}}
 '''
     write_file(project_dir / "app" / "main.py", main_content)
@@ -176,14 +146,17 @@ class Settings(AtamsBaseSettings):
 
     Inherits from AtamsBaseSettings which includes:
     - DATABASE_URL (required)
-    - ATLAS_SSO_URL, ATLAS_APP_CODE, ATLAS_ENCRYPTION_KEY, ATLAS_ENCRYPTION_IV
+    - ATLAS_APP_CODE (required - get from Atlas SSO admin)
     - ENCRYPTION_ENABLED, ENCRYPTION_KEY, ENCRYPTION_IV (response encryption)
     - LOGGING_ENABLED, LOG_LEVEL, LOG_TO_FILE, LOG_FILE_PATH
     - CORS_ORIGINS, CORS_ALLOW_CREDENTIALS, CORS_ALLOW_METHODS, CORS_ALLOW_HEADERS
     - RATE_LIMIT_ENABLED, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW
     - DEBUG
 
-    All settings can be overridden via .env file or by redefining them here.
+    Note: ATLAS_SSO_URL, ATLAS_ENCRYPTION_KEY, ATLAS_ENCRYPTION_IV are hardcoded
+    in ATAMS and cannot be overridden for security and consistency.
+
+    All other settings can be overridden via .env file or by redefining them here.
     """
     APP_NAME: str = "{app_name}"
     APP_VERSION: str = "{app_version}"
@@ -230,14 +203,15 @@ DEBUG=true
 DATABASE_URL=postgresql://user:password@localhost/{project_name.replace('-', '_')}
 
 # Atlas SSO
-ATLAS_SSO_URL=https://atlas.atamsindonesia.com
+# Note: ATLAS_SSO_URL, ATLAS_ENCRYPTION_KEY, ATLAS_ENCRYPTION_IV are hardcoded in ATAMS
+# Only ATLAS_APP_CODE needs to be configured (get this from Atlas SSO admin)
 ATLAS_APP_CODE={app_name.upper().replace(' ', '_')}
 
-# Response Encryption
+# Response Encryption (for GET endpoints)
 # IMPORTANT: Generate secure keys using:
 #   Key (32 chars): openssl rand -hex 16
 #   IV (16 chars):  openssl rand -hex 8
-ENCRYPTION_ENABLED=true
+ENCRYPTION_ENABLED=false
 ENCRYPTION_KEY=change_me_32_characters_long!!
 ENCRYPTION_IV=change_me_16char
 
@@ -348,16 +322,20 @@ AURA Application built with ATAMS toolkit.
 ## Example Endpoints
 
 This project includes a complete working example (Users CRUD) that demonstrates:
+- Complete CRUD operations (GET, POST, PUT, DELETE)
 - Two-level authorization (Route + Service)
 - Atlas SSO authentication
-- Response encryption
-- ORM usage with BaseRepository
+- Response encryption for GET endpoints
+- ORM and Native SQL examples in BaseRepository
+- Proper commit/rollback handling
 - Proper error handling
 
 **Available endpoints:**
 - GET /api/v1/users - List all users (requires role level >= 50)
 - GET /api/v1/users/{{id}} - Get single user (requires role level >= 10)
 - POST /api/v1/users - Create user (requires role level >= 50)
+- PUT /api/v1/users/{{id}} - Update user (requires role level >= 10)
+- DELETE /api/v1/users/{{id}} - Delete user (requires role level >= 50)
 
 ## Generate CRUD
 
@@ -397,86 +375,25 @@ See ATAMS documentation for more information.
     # deps.py - API dependencies with SSO
     deps_content = '''"""
 API Dependencies
-Provides authentication and authorization dependencies
+Provides authentication and authorization dependencies using ATAMS factory pattern
 """
-from fastapi import Depends, Header, HTTPException, status
-from typing import Dict, Any
-
-from atams.sso import AtlasClient
+from atams.sso import create_atlas_client, create_auth_dependencies
 from app.core.config import settings
 
-# Initialize Atlas SSO client
-atlas_client = AtlasClient(
-    base_url=settings.ATLAS_SSO_URL,
-    app_code=settings.ATLAS_APP_CODE,
-    encryption_key=settings.ATLAS_ENCRYPTION_KEY,
-    encryption_iv=settings.ATLAS_ENCRYPTION_IV
-)
+# Initialize Atlas SSO client using factory
+atlas_client = create_atlas_client(settings)
 
+# Create auth dependencies using factory
+get_current_user, require_auth, require_min_role_level, require_role_level = create_auth_dependencies(atlas_client)
 
-async def require_auth(authorization: str = Header(None)) -> Dict[str, Any]:
-    """
-    Require authentication via Atlas SSO
-
-    Usage:
-        @router.get("/protected")
-        async def protected_route(current_user: dict = Depends(require_auth)):
-            return {"user": current_user}
-
-    Returns:
-        Dict containing user info: {
-            "user_id": int,
-            "username": str,
-            "role_level": int,
-            "organization_id": int
-        }
-
-    Raises:
-        HTTPException 401 if token invalid/missing
-    """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header"
-        )
-
-    token = authorization.replace("Bearer ", "")
-
-    # Verify token dengan Atlas SSO
-    user_data = await atlas_client.verify_token(token)
-
-    if not user_data:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token"
-        )
-
-    return user_data
-
-
-def require_min_role_level(min_level: int):
-    """
-    Require minimum role level
-
-    Usage:
-        @router.get("/admin", dependencies=[Depends(require_min_role_level(50))])
-        async def admin_route():
-            return {"message": "Admin only"}
-
-    Role Levels:
-        10 = User
-        50 = Admin
-        100 = Super Admin
-    """
-    async def role_checker(current_user: Dict = Depends(require_auth)):
-        if current_user.get("role_level", 0) < min_level:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Insufficient permissions. Required level: {{min_level}}"
-            )
-        return current_user
-
-    return role_checker
+# Export for use in endpoints
+__all__ = [
+    "atlas_client",
+    "get_current_user",
+    "require_auth",
+    "require_min_role_level",
+    "require_role_level",
+]
 '''
     write_file(project_dir / "app" / "api" / "deps.py", deps_content)
     files_created.append("app/api/deps.py")
@@ -531,51 +448,69 @@ from atams.db import Base
 
 
 class User(Base):
-    __tablename__ = "users"
+    """User model for {db_schema} schema - Table: {db_schema}.user"""
+    __tablename__ = "user"
     __table_args__ = {{"schema": "{db_schema}"}}
 
-    u_id = Column(Integer, primary_key=True, index=True)
-    u_name = Column(String(100), nullable=False)
-    u_email = Column(String(100), unique=True, index=True, nullable=False)
-    u_is_active = Column(Boolean, default=True)
-    u_created_at = Column(DateTime(timezone=True), server_default=func.now())
-    u_updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    u_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    u_name = Column(String, nullable=True)
+    u_created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    u_updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 '''
     write_file(project_dir / "app" / "models" / "user.py", user_model)
     files_created.append("app/models/user.py")
 
     # Example Schema - User
-    user_schema = '''"""
-Example User Schemas
-"""
-from pydantic import BaseModel, EmailStr
+    user_schema = '''from typing import Optional
 from datetime import datetime
-from typing import Optional
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class UserBase(BaseModel):
-    u_name: str
-    u_email: EmailStr
+    u_name: Optional[str] = None
 
 
 class UserCreate(UserBase):
     pass
 
 
-class UserUpdate(BaseModel):
-    u_name: Optional[str] = None
-    u_email: Optional[EmailStr] = None
-    u_is_active: Optional[bool] = None
+class UserUpdate(UserBase):
+    pass
 
 
-class User(UserBase):
+class UserInDB(UserBase):
+    model_config = ConfigDict(from_attributes=True)
+
     u_id: int
-    u_is_active: bool
     u_created_at: datetime
     u_updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    @field_validator('u_updated_at', 'u_created_at', mode='before')
+    @classmethod
+    def fix_datetime_timezone(cls, v):
+        """
+        Fix datetime timezone format from PostgreSQL
+        PostgreSQL returns: '2025-10-01 09:17:39.587802+00'
+        Pydantic expects: '2025-10-01 09:17:39.587802+00:00'
+        """
+        if v == '' or v is None:
+            return None
+
+        # Fix timezone format: +00 -> +00:00, +07 -> +07:00
+        if isinstance(v, str):
+            # Pattern: ends with +XX or -XX (without colon)
+            import re
+            # Match timezone like +00, +07, -05 at the end
+            pattern = r'([+-]\\d{{2}})$'
+            match = re.search(pattern, v)
+            if match:
+                v = v + ':00'
+
+        return v
+
+
+class User(UserInDB):
+    pass
 '''
     write_file(project_dir / "app" / "schemas" / "user.py", user_schema)
     files_created.append("app/schemas/user.py")
@@ -612,7 +547,11 @@ class PaginationResponse(ResponseBase, Generic[T]):
     # Example Repository - User
     user_repo = '''"""
 Example User Repository
+Demonstrates ORM and Native SQL patterns
 """
+from typing import Optional
+from sqlalchemy.orm import Session
+
 from atams.db import BaseRepository
 from app.models.user import User
 
@@ -621,30 +560,114 @@ class UserRepository(BaseRepository[User]):
     def __init__(self):
         super().__init__(User)
 
-    # Add custom methods here
-    def get_by_email(self, db, email: str):
-        """Get user by email"""
-        return db.query(User).filter(User.u_email == email).first()
+    def get_by_name(self, db: Session, name: str) -> Optional[User]:
+        """
+        Get user by name using ORM
+
+        Example of custom ORM query
+        """
+        return db.query(User).filter(User.u_name == name).first()
+
+    def get_users_with_native_sql(self, db: Session, skip: int = 0, limit: int = 100):
+        """
+        Get users using Native SQL
+
+        EXAMPLE: Shows how to use native SQL for complex queries
+        Always use parameterized queries to prevent SQL injection
+        """
+        query = """
+            SELECT u_id, u_name, u_created_at, u_updated_at
+            FROM {db_schema}.user
+            ORDER BY u_created_at DESC
+            LIMIT :limit OFFSET :skip
+        """
+        return self.execute_raw_sql_dict(db, query, {{"skip": skip, "limit": limit}})
+
+    def count_users_native_sql(self, db: Session) -> int:
+        """
+        Count users using Native SQL
+
+        EXAMPLE: Shows how to use native SQL for scalar results
+        """
+        query = "SELECT COUNT(*) FROM {db_schema}.user"
+        return self.execute_raw_sql_scalar(db, query)
 '''
-    write_file(project_dir / "app" / "repositories" / "user_repository.py", user_repo)
+    write_file(project_dir / "app" / "repositories" / "user_repository.py", user_repo.format(db_schema=db_schema))
     files_created.append("app/repositories/user_repository.py")
 
     # Example Service - User
     user_service = '''"""
-Example User Service
-Implements business logic with two-level authorization
+User Service
+Business logic layer with role-based permission validation
+
+SECOND LEVEL VALIDATION happens here:
+- Route level checks: "Can access this endpoint?" (via require_role_level)
+- Service level checks: "What can this role level do?" (implemented here)
 """
+from typing import List
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
 
 from app.repositories.user_repository import UserRepository
-from app.schemas.user import UserCreate, UserUpdate
-from atams.exceptions import NotFoundException, ForbiddenException, BadRequestException
+from app.schemas.user import UserCreate, UserUpdate, User
+from atams.exceptions import (
+    NotFoundException,
+    ForbiddenException,
+    BadRequestException
+)
 
 
 class UserService:
     def __init__(self):
-        self.repo = UserRepository()
+        self.repository = UserRepository()
+
+    def get_user(
+        self,
+        db: Session,
+        user_id: int,
+        current_user_role_level: int,
+        current_user_id: int
+    ) -> User:
+        """
+        Get single user with role-based access control
+
+        Permission logic (SECOND LEVEL VALIDATION):
+        - Level 100 (Super Admin): Can view any user
+        - Level 50 (Admin): Can view users in same organization
+        - Level 10 (User): Can only view own profile
+
+        Args:
+            db: Database session
+            user_id: User ID to retrieve
+            current_user_role_level: Role level from Atlas SSO
+            current_user_id: Current user's ID from Atlas SSO
+
+        Returns:
+            User data
+
+        Raises:
+            NotFoundException: User not found
+            ForbiddenException: Insufficient permission
+        """
+        db_user = self.repository.get(db, user_id)
+
+        if not db_user:
+            raise NotFoundException(f"User with ID {{user_id}} not found")
+
+        # SECOND LEVEL VALIDATION - What can each role level do?
+        if current_user_role_level >= 100:
+            # Super Admin can view any user
+            pass
+        elif current_user_role_level >= 50:
+            # Admin can view users (add organization check here if needed)
+            pass
+        elif current_user_role_level >= 10:
+            # Regular user can only view own profile
+            if user_id != current_user_id:
+                raise ForbiddenException("You can only view your own profile")
+        else:
+            raise ForbiddenException("Insufficient permission to view user")
+
+        return User.model_validate(db_user)
 
     def get_users(
         self,
@@ -652,148 +675,172 @@ class UserService:
         skip: int = 0,
         limit: int = 100,
         current_user_role_level: int = 0
-    ) -> List[Dict[str, Any]]:
+    ) -> List[User]:
         """
-        Get users with authorization check
+        Get list of users with pagination
 
-        Authorization:
+        Permission logic:
         - Level 100: Can view all users
-        - Level 50: Can view users in organization (not implemented in example)
-        - Below 50: Forbidden
+        - Level 50: Can view users in organization
+        - Level 10: Cannot list users
+
+        Raises:
+            ForbiddenException: Insufficient permission
         """
+        # SECOND LEVEL VALIDATION
         if current_user_role_level < 50:
-            raise ForbiddenException("Insufficient permissions to view users")
+            raise ForbiddenException("Insufficient permission to list users")
 
-        users = self.repo.get_multi(db, skip=skip, limit=limit)
+        db_users = self.repository.get_multi(db, skip=skip, limit=limit)
+        return [User.model_validate(user) for user in db_users]
 
-        return [
-            {{
-                "id": user.u_id,
-                "name": user.u_name,
-                "email": user.u_email,
-                "is_active": user.u_is_active,
-                "created_at": str(user.u_created_at)
-            }}
-            for user in users
-        ]
+    def create_user(self, db: Session, user: UserCreate, current_user_role_level: int) -> User:
+        """
+        Create new user
 
-    def get_user(
+        Permission logic:
+        - Level 100: Can create any user
+        - Level 50: Can create users with level < 50
+        - Level 10: Cannot create users
+
+        Raises:
+            ForbiddenException: Insufficient permission
+            BadRequestException: Invalid data
+        """
+        # SECOND LEVEL VALIDATION
+        if current_user_role_level < 50:
+            raise ForbiddenException("Insufficient permission to create user")
+
+        # Validate input
+        if not user.u_name or len(user.u_name.strip()) == 0:
+            raise BadRequestException("User name is required")
+
+        db_user = self.repository.create(db, user.model_dump())
+        return User.model_validate(db_user)
+
+    def update_user(
         self,
         db: Session,
         user_id: int,
-        current_user_role_level: int = 0,
-        current_user_id: int = None
-    ) -> Dict[str, Any]:
+        user: UserUpdate,
+        current_user_role_level: int,
+        current_user_id: int
+    ) -> User:
         """
-        Get single user with authorization
+        Update existing user
 
-        Authorization:
-        - Level 100: Can view any user
-        - Level 50: Can view users in organization
-        - Level 10: Can only view own profile
+        Permission logic:
+        - Level 100: Can update any user
+        - Level 50: Can update users with level < 50
+        - Level 10: Can only update own profile
+
+        Raises:
+            NotFoundException: User not found
+            ForbiddenException: Insufficient permission
         """
-        user = self.repo.get(db, user_id)
-        if not user:
-            raise NotFoundException(f"User {{user_id}} not found")
+        db_user = self.repository.get(db, user_id)
 
-        # Check permissions
+        if not db_user:
+            raise NotFoundException(f"User with ID {{user_id}} not found")
+
+        # SECOND LEVEL VALIDATION - User ownership check
+        if current_user_role_level >= 100:
+            # Super Admin can update any user
+            pass
+        elif current_user_role_level >= 50:
+            # Admin can update users (add level check if needed)
+            pass
+        elif current_user_role_level >= 10:
+            # Regular user can only update own profile
+            if user_id != current_user_id:
+                raise ForbiddenException("You can only update your own profile")
+        else:
+            raise ForbiddenException("Insufficient permission to update user")
+
+        update_data = user.model_dump(exclude_unset=True)
+        db_user = self.repository.update(db, db_user, update_data)
+        return User.model_validate(db_user)
+
+    def delete_user(self, db: Session, user_id: int, current_user_role_level: int) -> None:
+        """
+        Delete user
+
+        Permission logic:
+        - Level 100: Can delete any user
+        - Level 50: Can delete users with level < 50
+        - Level 10: Cannot delete users
+
+        Raises:
+            NotFoundException: User not found
+            ForbiddenException: Insufficient permission
+        """
+        # SECOND LEVEL VALIDATION
         if current_user_role_level < 50:
-            # User can only view own profile
-            if user.u_id != current_user_id:
-                raise ForbiddenException("Can only view own profile")
+            raise ForbiddenException("Insufficient permission to delete user")
 
-        return {{
-            "id": user.u_id,
-            "name": user.u_name,
-            "email": user.u_email,
-            "is_active": user.u_is_active,
-            "created_at": str(user.u_created_at)
-        }}
+        deleted = self.repository.delete(db, user_id)
 
-    def create_user(
-        self,
-        db: Session,
-        user_in: UserCreate,
-        current_user_role_level: int = 0
-    ) -> Dict[str, Any]:
-        """
-        Create user
-
-        Authorization:
-        - Level 100: Can create any user
-        - Level 50: Can create users with level < 50
-        """
-        if current_user_role_level < 50:
-            raise ForbiddenException("Insufficient permissions to create users")
-
-        # Check if email exists
-        existing = self.repo.get_by_email(db, user_in.u_email)
-        if existing:
-            raise BadRequestException(f"Email {{user_in.u_email}} already exists")
-
-        # Create user
-        user = self.repo.create(db, obj_in=user_in)
-
-        return {{
-            "id": user.u_id,
-            "name": user.u_name,
-            "email": user.u_email,
-            "is_active": user.u_is_active
-        }}
+        if not deleted:
+            raise NotFoundException(f"User with ID {{user_id}} not found")
 
     def get_total_users(self, db: Session) -> int:
-        """Get total user count"""
-        return self.repo.count(db)
+        """Get total count of users"""
+        return self.repository.count(db)
 '''
     write_file(project_dir / "app" / "services" / "user_service.py", user_service)
     files_created.append("app/services/user_service.py")
 
     # Example Endpoint - Users
     users_endpoint = '''"""
-Example Users Endpoint
-Demonstrates complete ATAMS patterns
+User Endpoints
+Demonstrates complete AURA v2 patterns:
+- Atlas SSO authentication
+- Two-level authorization (route + service)
+- Response encryption for GET
+- Proper HTTP status codes
+- Clean error handling
 """
-from fastapi import APIRouter, Depends, Query, status, Security
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.db.session import get_db
 from app.services.user_service import UserService
 from app.schemas.user import User, UserCreate, UserUpdate
 from app.schemas.common import DataResponse, PaginationResponse
 from app.api.deps import require_auth, require_min_role_level
-from atams.encryption import create_response_encryption, create_encrypt_response_function
+from atams.encryption import encrypt_response_data
+from app.core.config import settings
 
 router = APIRouter()
 user_service = UserService()
-security = HTTPBearer()
-
-# Setup response encryption
-_encryption = create_response_encryption(settings.ENCRYPTION_KEY, settings.ENCRYPTION_IV)
-encrypt_response = create_encrypt_response_function(settings.ENCRYPTION_ENABLED, _encryption)
 
 
 @router.get(
     "/",
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_min_role_level(50)), Security(security)]  # FIRST LEVEL: Route
+    dependencies=[Depends(require_min_role_level(50))]  # FIRST LEVEL: Route validation
 )
 async def get_users(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum records to return"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_auth)
 ):
     """
     Get list of users with pagination
 
-    **Two-Level Authorization:**
-    - FIRST (Route): Requires role level >= 50
-    - SECOND (Service): Level 100 sees all, Level 50 sees organization
+    **FIRST LEVEL Authorization (Route):**
+    - Requires role level >= 50 (Admin or above)
 
-    **Response**: Encrypted if ENCRYPTION_ENABLED=true
+    **SECOND LEVEL Authorization (Service):**
+    - Level 100: Can view all users
+    - Level 50: Can view users in organization
+
+    **Response:**
+    - Encrypted if ENCRYPTION_ENABLED=true
+    - Status code 200
     """
+    # SECOND LEVEL: Service validates what each level can do
     users = user_service.get_users(
         db,
         skip=skip,
@@ -812,20 +859,37 @@ async def get_users(
         pages=(total + limit - 1) // limit
     )
 
-    return encrypt_response(response)
+    # Auto-encrypt GET responses
+    return encrypt_response_data(response, settings)
 
 
 @router.get(
-    "/{{user_id}}",
+    "/{user_id}",
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_min_role_level(10)), Security(security)]
+    dependencies=[Depends(require_min_role_level(10))]  # FIRST LEVEL: Route validation
 )
 async def get_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_auth)
 ):
-    """Get single user by ID"""
+    """
+    Get single user by ID
+
+    **FIRST LEVEL Authorization (Route):**
+    - Requires role level >= 10 (any authenticated user)
+
+    **SECOND LEVEL Authorization (Service):**
+    - Level 100: Can view any user
+    - Level 50: Can view users in organization
+    - Level 10: Can only view own profile
+
+    **Response:**
+    - Encrypted if ENCRYPTION_ENABLED=true
+    - Status code 200
+    - Raises 404 if not found
+    """
+    # SECOND LEVEL: Service validates permissions with user ownership
     user = user_service.get_user(
         db,
         user_id,
@@ -839,21 +903,36 @@ async def get_user(
         data=user
     )
 
-    return encrypt_response(response)
+    # Auto-encrypt GET responses
+    return encrypt_response_data(response, settings)
 
 
 @router.post(
     "/",
     response_model=DataResponse[User],
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_min_role_level(50)), Security(security)]
+    dependencies=[Depends(require_min_role_level(50))]  # FIRST LEVEL
 )
 async def create_user(
     user: UserCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_auth)
 ):
-    """Create new user"""
+    """
+    Create new user
+
+    **FIRST LEVEL Authorization (Route):**
+    - Requires role level >= 50 (Admin or above)
+
+    **SECOND LEVEL Authorization (Service):**
+    - Level 100: Can create any user
+    - Level 50: Can create users with level < 50
+
+    **Response:**
+    - Status code 201 (Created)
+    - Raises 400 if validation fails
+    - Raises 409 if user exists
+    """
     new_user = user_service.create_user(
         db,
         user,
@@ -865,6 +944,84 @@ async def create_user(
         message="User created successfully",
         data=new_user
     )
+
+
+@router.put(
+    "/{user_id}",
+    response_model=DataResponse[User],
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_min_role_level(10))]  # FIRST LEVEL
+)
+async def update_user(
+    user_id: int,
+    user: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_auth)
+):
+    """
+    Update existing user
+
+    **FIRST LEVEL Authorization (Route):**
+    - Requires role level >= 10
+
+    **SECOND LEVEL Authorization (Service):**
+    - Level 100: Can update any user
+    - Level 50: Can update users with level < 50
+    - Level 10: Can only update own profile
+
+    **Response:**
+    - Status code 200
+    - Raises 404 if not found
+    - Raises 403 if insufficient permission
+    """
+    updated_user = user_service.update_user(
+        db,
+        user_id,
+        user,
+        current_user_role_level=current_user["role_level"],
+        current_user_id=current_user["user_id"]
+    )
+
+    return DataResponse(
+        success=True,
+        message="User updated successfully",
+        data=updated_user
+    )
+
+
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_min_role_level(50))]  # FIRST LEVEL
+)
+async def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_auth)
+):
+    """
+    Delete user
+
+    **FIRST LEVEL Authorization (Route):**
+    - Requires role level >= 50 (Admin or above)
+
+    **SECOND LEVEL Authorization (Service):**
+    - Level 100: Can delete any user
+    - Level 50: Can delete users with level < 50
+
+    **Response:**
+    - Status code 204 (No Content) on success
+    - Raises 404 if not found
+    - Raises 403 if insufficient permission
+    """
+    user_service.delete_user(
+        db,
+        user_id,
+        current_user_role_level=current_user["role_level"]
+    )
+
+    # 204 returns no content
+    return None
 '''
     write_file(project_dir / "app" / "api" / "v1" / "endpoints" / "users.py", users_endpoint)
     files_created.append("app/api/v1/endpoints/users.py")

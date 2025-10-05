@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from atams.exceptions.base import AppException
+from atams.exceptions import AppException
 from atams.logging import get_logger
 
 logger = get_logger(__name__)
@@ -108,10 +108,19 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 
 def setup_exception_handlers(app):
-    """Setup all exception handlers untuk FastAPI app"""
-    from fastapi.exceptions import RequestValidationError
-    from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+    """
+    Setup all exception handlers for FastAPI application
 
+    Args:
+        app: FastAPI application instance
+
+    Example:
+        from fastapi import FastAPI
+        from atams.exceptions import setup_exception_handlers
+
+        app = FastAPI()
+        setup_exception_handlers(app)
+    """
     app.add_exception_handler(AppException, app_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(IntegrityError, integrity_exception_handler)

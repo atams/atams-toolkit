@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, ClassVar
 import json
 
 
@@ -7,16 +7,24 @@ class AtamsBaseSettings(BaseSettings):
     """
     Base settings untuk semua AURA applications
     Inherit class ini di project-specific settings
+
+    ATLAS SSO CONSTANTS:
+    - ATLAS_SSO_URL, ATLAS_ENCRYPTION_KEY, ATLAS_ENCRYPTION_IV are system constants
+    - These CANNOT be overridden via .env file for security and consistency
+    - Only ATLAS_APP_CODE is user-configurable
     """
 
     # Database (required per app)
     DATABASE_URL: str
 
-    # Atlas SSO (common pattern)
-    ATLAS_SSO_URL: str
+    # Atlas SSO - User Configuration (only this is configurable!)
     ATLAS_APP_CODE: str
-    ATLAS_ENCRYPTION_KEY: str = "atams_apps_secret_key_goes_here"  # DEFAULT
-    ATLAS_ENCRYPTION_IV: str = "atams_apps_iv!!"  # DEFAULT
+
+    # Atlas SSO - System Constants (FINAL - cannot be overridden!)
+    # Using ClassVar to prevent Pydantic from allowing .env override
+    ATLAS_SSO_URL: ClassVar[str] = "https://api.atlas-microapi.atamsindonesia.com/api/v1"
+    ATLAS_ENCRYPTION_KEY: ClassVar[str] = "7c5f7132ba1a6e566bccc56416039bea"
+    ATLAS_ENCRYPTION_IV: ClassVar[str] = "ce84582d0e6d2591"
 
     # Response Encryption (app-specific)
     ENCRYPTION_ENABLED: bool = False

@@ -4,16 +4,34 @@ Handles communication with Atlas SSO service for authentication and authorizatio
 """
 import httpx
 import json
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 import base64
+
+if TYPE_CHECKING:
+    from atams.config.base import AtamsBaseSettings
 
 
 class AtlasClient:
     """Client for Atlas SSO API communication"""
 
-    def __init__(self, base_url: str, app_code: str, encryption_key: str, encryption_iv: str):
+    def __init__(
+        self,
+        base_url: str,
+        app_code: str,
+        encryption_key: str = "atams_apps_secret_key_goes_here",
+        encryption_iv: str = "atams_apps_iv!!"
+    ):
+        """
+        Initialize Atlas SSO client
+
+        Args:
+            base_url: Atlas SSO base URL
+            app_code: Application code for role validation
+            encryption_key: Atlas encryption key (default for ATAMS ecosystem)
+            encryption_iv: Atlas encryption IV (default for ATAMS ecosystem)
+        """
         self.base_url = base_url
         self.app_code = app_code
         # Setup decryption for Atlas responses
@@ -193,8 +211,22 @@ class AtlasClient:
         ]
 
 
-def create_atlas_client_from_settings(settings):
-    """Factory function untuk create AtlasClient dari settings"""
+def create_atlas_client(settings: 'AtamsBaseSettings') -> AtlasClient:
+    """
+    Create AtlasClient from settings
+
+    Args:
+        settings: Application settings
+
+    Returns:
+        Configured AtlasClient instance
+
+    Example:
+        from app.core.config import settings
+        from atams.sso import create_atlas_client
+
+        atlas_client = create_atlas_client(settings)
+    """
     return AtlasClient(
         base_url=settings.ATLAS_SSO_URL,
         app_code=settings.ATLAS_APP_CODE,

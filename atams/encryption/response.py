@@ -8,19 +8,24 @@ Can be disabled via ENCRYPTION_ENABLED=false in .env
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 import base64
-from typing import Any, Dict, TYPE_CHECKING
+from typing import Any, Dict
 
-if TYPE_CHECKING:
-    from atams.config.base import AtamsBaseSettings
+# Settings will be passed as parameter
 
 
 class ResponseEncryption:
     """Handle response encryption/decryption using AES-256"""
 
-    def __init__(self, encryption_key: str, encryption_iv: str):
+    def __init__(self, settings):
+        """
+        Initialize encryption with settings
+        
+        Args:
+            settings: Application settings instance with ENCRYPTION_KEY and ENCRYPTION_IV
+        """
         # Ensure key and IV are exactly the right length
-        self.key = encryption_key.encode('utf-8')[:32].ljust(32, b'\0')
-        self.iv = encryption_iv.encode('utf-8')[:16].ljust(16, b'\0')
+        self.key = settings.ENCRYPTION_KEY.encode('utf-8')[:32].ljust(32, b'\0')
+        self.iv = settings.ENCRYPTION_IV.encode('utf-8')[:16].ljust(16, b'\0')
 
     def encrypt(self, data: str) -> str:
         """
@@ -53,47 +58,31 @@ class ResponseEncryption:
         return unpad(decrypted, AES.block_size).decode('utf-8')
 
 
-def get_encryption_instance(settings: 'AtamsBaseSettings') -> ResponseEncryption:
-    """
-    Get or create encryption instance
-
-    Args:
-        settings: Application settings instance
-
-    Returns:
-        ResponseEncryption instance
-    """
-    return ResponseEncryption(settings.ENCRYPTION_KEY, settings.ENCRYPTION_IV)
+# No singleton - pass settings when calling
+# encryption = ResponseEncryption(settings)
 
 
-def encrypt_response_data(response_data: Any, settings: 'AtamsBaseSettings') -> Dict[str, Any]:
+def encrypt_response_data(response_data: Any, settings) -> Dict[str, Any]:
     """
     Encrypt response data for GET endpoints
 
-    Simple singleton-like pattern for easy use in endpoints.
-    Automatically checks ENCRYPTION_ENABLED setting.
-
     Args:
-        response_data: Response object to encrypt (Pydantic model or dict)
-        settings: Application settings instance
+        response_data: Response object to encrypt
 
     Returns:
-        Dict with encrypted data field if enabled, otherwise original data
+        Dict with encrypted data field
 
     Example:
-        from app.core.config import settings
-        from atams.encryption import encrypt_response_data
-
         response = DataResponse(success=True, message="Success", data=user_data)
-        return encrypt_response_data(response, settings)
+        if encryption_enabled:
+            return encrypt_response_data(response)
+        return response
     """
     if not settings.ENCRYPTION_ENABLED:
         return response_data
 
-    # Get encryption instance
-    encryption = get_encryption_instance(settings)
-
     # Convert response to JSON string
+    # Use model_dump_json() if available (Pydantic v2), else model_dump with mode='json'
     if hasattr(response_data, 'model_dump_json'):
         json_data = response_data.model_dump_json()
     elif hasattr(response_data, 'model_dump'):
@@ -104,6 +93,7 @@ def encrypt_response_data(response_data: Any, settings: 'AtamsBaseSettings') -> 
         json_data = json.dumps(response_data, default=str)
 
     # Encrypt
+    encryption = ResponseEncryption(settings)
     encrypted = encryption.encrypt(json_data)
 
     # Return wrapped response
