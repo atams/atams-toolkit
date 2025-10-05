@@ -1,6 +1,6 @@
 # ATAMS - Advanced Toolkit for Application Management System
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
 ![Python](https://img.shields.io/badge/python-3.9+-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -166,6 +166,50 @@ my-app/
 
 ### Using BaseRepository
 
+BaseRepository menyediakan 20+ methods untuk operasi database yang lengkap:
+
+#### Basic CRUD Operations
+| Method | Description |
+|--------|-------------|
+| `get(db, id)` | Get single record by ID |
+| `get_multi(db, skip, limit)` | Get multiple records with pagination |
+| `create(db, obj_in)` | Create new record |
+| `update(db, db_obj, obj_in)` | Update existing record |
+| `delete(db, id)` | Delete record by ID |
+
+#### Advanced Query Methods
+| Method | Description |
+|--------|-------------|
+| `exists(db, id)` | Fast existence check (returns bool) |
+| `filter(db, filters, skip, limit, order_by)` | Dynamic filtering with pagination & ordering |
+| `first(db, filters, order_by)` | Get first matching record |
+| `count_filtered(db, filters)` | Count records with conditions |
+| `get_or_create(db, defaults, **filters)` | Get existing or create new (atomic) |
+| `update_or_create(db, filters, defaults)` | Update existing or create (upsert) |
+
+#### Bulk Operations (High Performance)
+| Method | Description |
+|--------|-------------|
+| `bulk_create(db, objects)` | Batch insert (100x faster than loop) |
+| `bulk_update(db, objects)` | Batch update multiple records |
+| `delete_many(db, ids)` | Batch delete by IDs |
+| `partial_update(db, id, data)` | Update without fetching first |
+
+#### Soft Delete Pattern
+| Method | Description |
+|--------|-------------|
+| `soft_delete(db, id, deleted_at_field)` | Logical deletion with timestamp |
+| `restore(db, id, deleted_at_field)` | Restore soft-deleted record |
+
+#### Native SQL Execution
+| Method | Description |
+|--------|-------------|
+| `execute_raw_sql(db, query, params)` | Execute raw SQL, returns result |
+| `execute_raw_sql_dict(db, query, params)` | Execute SQL, returns list of dicts |
+| `execute_raw_sql_commit(db, query, params)` | Execute SQL with auto-commit |
+
+**Example Usage:**
+
 ```python
 from atams import BaseRepository
 from app.models.user import User
@@ -173,18 +217,50 @@ from app.models.user import User
 class UserRepository(BaseRepository[User]):
     def __init__(self):
         super().__init__(User)
-    
-    # ORM methods (inherited)
-    # - get(db, id)
-    # - get_multi(db, skip, limit)
-    # - create(db, obj_in)
-    # - update(db, db_obj, obj_in)
-    # - delete(db, id)
-    
-    # Custom native SQL
-    def get_active_users(self, db):
+
+    def example_usage(self, db):
+        # Basic CRUD
+        user = self.get(db, id=1)
+        users = self.get_multi(db, skip=0, limit=10)
+        new_user = self.create(db, {"name": "John", "email": "john@example.com"})
+
+        # Advanced queries
+        if self.exists(db, id=1):
+            print("User exists!")
+
+        active_users = self.filter(db,
+            filters={"status": "active"},
+            skip=0, limit=50,
+            order_by="-created_at"  # descending
+        )
+
+        first_admin = self.first(db,
+            filters={"role": "admin"},
+            order_by="created_at"
+        )
+
+        total = self.count_filtered(db, {"status": "active"})
+
+        # Get or create pattern
+        user, created = self.get_or_create(db,
+            defaults={"status": "pending"},
+            email="new@example.com"
+        )
+
+        # Bulk operations (very fast!)
+        users_data = [
+            {"name": "User1", "email": "user1@example.com"},
+            {"name": "User2", "email": "user2@example.com"},
+        ]
+        self.bulk_create(db, users_data)
+
+        # Soft delete
+        self.soft_delete(db, id=1, deleted_at_field="deleted_at")
+        self.restore(db, id=1, deleted_at_field="deleted_at")
+
+        # Native SQL
         query = "SELECT * FROM users WHERE status = :status"
-        return self.execute_raw_sql_dict(db, query, {"status": "active"})
+        active_users = self.execute_raw_sql_dict(db, query, {"status": "active"})
 ```
 
 ### Using Atlas SSO
@@ -256,7 +332,7 @@ ATAMS follows [Semantic Versioning](https://semver.org/):
 - **MINOR** version for new functionality (backwards compatible)
 - **PATCH** version for bug fixes
 
-Current version: **1.0.0**
+Current version: **1.1.0**
 
 ## Contributing
 

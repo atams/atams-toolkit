@@ -15,7 +15,7 @@ Usage in user project (app/main.py):
     app.add_middleware(create_rate_limit_middleware(settings))
 """
 import time
-from typing import Dict, Tuple, TYPE_CHECKING, Optional
+from typing import Dict, Tuple, TYPE_CHECKING, Optional, Any
 from collections import defaultdict
 from fastapi import Request, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -23,9 +23,10 @@ from starlette.responses import Response
 
 if TYPE_CHECKING:
     from atams.config.base import AtamsBaseSettings
+    from logging import LoggerAdapter
 
 # Optional logger - will use print if not available
-logger: Optional['LoggerAdapter'] = None
+logger: Optional[Any] = None
 try:
     from atams.logging import get_logger
     logger = get_logger(__name__)

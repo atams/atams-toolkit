@@ -6,19 +6,17 @@ Middleware for ATAMS
 """
 import time
 import uuid
-from typing import Callable, Optional
+from typing import Callable, Optional, Any
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
 # Optional logger - will work without it
-logger: Optional['LoggerAdapter'] = None
-LoggerAdapter = None
+logger: Optional[Any] = None
 
 try:
-    from atams.logging import get_logger, LoggerAdapter as LA
+    from atams.logging import get_logger
     logger = get_logger(__name__)
-    LoggerAdapter = LA
 except ImportError:
     pass
 

@@ -313,3 +313,354 @@ class BaseRepository(Generic[ModelType]):
         """
         result = db.execute(text(query), params or {})
         return result.scalar()
+
+    # ==================== ADVANCED CRUD METHODS ====================
+
+    def exists(self, db: Session, id: Any) -> bool:
+        """
+        Check if record exists by ID (fast query)
+
+        Args:
+            db: Database session
+            id: Primary key value
+
+        Returns:
+            True if exists, False otherwise
+
+        Example:
+            if user_repo.exists(db, user_id=1):
+                print("User exists")
+        """
+        pk_attr = getattr(self.model, self._pk_column)
+        return db.query(pk_attr).filter(pk_attr == id).first() is not None
+
+    def filter(
+        self,
+        db: Session,
+        filters: Optional[Dict[str, Any]] = None,
+        skip: int = 0,
+        limit: int = 100,
+        order_by: Optional[str] = None
+    ) -> List[ModelType]:
+        """
+        Get filtered records with pagination and ordering
+
+        Args:
+            db: Database session
+            filters: Dictionary of field:value pairs
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+            order_by: Column name to order by (prefix with - for DESC)
+
+        Returns:
+            List of model instances
+
+        Example:
+            users = repo.filter(
+                db,
+                filters={"u_is_active": True},
+                order_by="-u_created_at",
+                limit=10
+            )
+        """
+        query = db.query(self.model)
+
+        # Apply filters
+        if filters:
+            for field, value in filters.items():
+                if hasattr(self.model, field):
+                    query = query.filter(getattr(self.model, field) == value)
+
+        # Apply ordering
+        if order_by:
+            if order_by.startswith('-'):
+                # Descending order
+                column_name = order_by[1:]
+                if hasattr(self.model, column_name):
+                    query = query.order_by(getattr(self.model, column_name).desc())
+            else:
+                # Ascending order
+                if hasattr(self.model, order_by):
+                    query = query.order_by(getattr(self.model, order_by))
+
+        return query.offset(skip).limit(limit).all()
+
+    def first(
+        self,
+        db: Session,
+        filters: Optional[Dict[str, Any]] = None,
+        order_by: Optional[str] = None
+    ) -> Optional[ModelType]:
+        """
+        Get first record matching filters
+
+        Args:
+            db: Database session
+            filters: Dictionary of field:value pairs
+            order_by: Column name to order by (prefix with - for DESC)
+
+        Returns:
+            First matching model instance or None
+
+        Example:
+            user = repo.first(db, filters={"u_email": "john@example.com"})
+        """
+        results = self.filter(db, filters=filters, skip=0, limit=1, order_by=order_by)
+        return results[0] if results else None
+
+    def count_filtered(self, db: Session, filters: Optional[Dict[str, Any]] = None) -> int:
+        """
+        Count records matching filters
+
+        Args:
+            db: Database session
+            filters: Dictionary of field:value pairs
+
+        Returns:
+            Count of matching records
+
+        Example:
+            active_count = repo.count_filtered(db, {"u_is_active": True})
+        """
+        pk_attr = getattr(self.model, self._pk_column)
+        query = db.query(func.count(pk_attr))
+
+        if filters:
+            for field, value in filters.items():
+                if hasattr(self.model, field):
+                    query = query.filter(getattr(self.model, field) == value)
+
+        return query.scalar()
+
+    def bulk_create(self, db: Session, objects: List[Dict[str, Any]]) -> List[ModelType]:
+        """
+        Bulk insert multiple records (much faster than loop)
+
+        Args:
+            db: Database session
+            objects: List of dictionaries with field values
+
+        Returns:
+            List of created model instances
+
+        Example:
+            users = repo.bulk_create(db, [
+                {"u_name": "John"},
+                {"u_name": "Jane"},
+                {"u_name": "Bob"}
+            ])
+        """
+        db_objects = [self.model(**obj) for obj in objects]
+        db.bulk_save_objects(db_objects, return_defaults=True)
+        db.commit()
+        return db_objects
+
+    def bulk_update(self, db: Session, objects: List[ModelType]) -> None:
+        """
+        Bulk update multiple records
+
+        Args:
+            db: Database session
+            objects: List of model instances with updated values
+
+        Example:
+            users = repo.get_multi(db, limit=100)
+            for user in users:
+                user.u_is_active = True
+            repo.bulk_update(db, users)
+        """
+        db.bulk_save_objects(objects)
+        db.commit()
+
+    def delete_many(self, db: Session, ids: List[Any]) -> int:
+        """
+        Delete multiple records by IDs
+
+        Args:
+            db: Database session
+            ids: List of primary key values
+
+        Returns:
+            Number of deleted records
+
+        Example:
+            deleted_count = repo.delete_many(db, [1, 2, 3, 4, 5])
+        """
+        pk_attr = getattr(self.model, self._pk_column)
+        deleted_count = db.query(self.model).filter(pk_attr.in_(ids)).delete(synchronize_session=False)
+        db.commit()
+        return deleted_count
+
+    def partial_update(
+        self,
+        db: Session,
+        id: Any,
+        data: Dict[str, Any]
+    ) -> Optional[ModelType]:
+        """
+        Update record without fetching it first (more efficient)
+
+        Args:
+            db: Database session
+            id: Primary key value
+            data: Dictionary of fields to update
+
+        Returns:
+            Updated model instance or None if not found
+
+        Example:
+            user = repo.partial_update(db, 1, {"u_name": "New Name"})
+        """
+        pk_attr = getattr(self.model, self._pk_column)
+
+        # Update query
+        db.query(self.model).filter(pk_attr == id).update(data, synchronize_session=False)
+        db.commit()
+
+        # Fetch updated object
+        return db.query(self.model).filter(pk_attr == id).first()
+
+    def get_or_create(
+        self,
+        db: Session,
+        defaults: Optional[Dict[str, Any]] = None,
+        **filters
+    ) -> tuple[ModelType, bool]:
+        """
+        Get existing record or create new one (atomic operation)
+
+        Args:
+            db: Database session
+            defaults: Default values for creation
+            **filters: Filter criteria for lookup
+
+        Returns:
+            Tuple of (model_instance, created)
+            - created=True if new record was created
+            - created=False if existing record was found
+
+        Example:
+            user, created = repo.get_or_create(
+                db,
+                defaults={"u_name": "John Doe"},
+                u_email="john@example.com"
+            )
+            if created:
+                print("New user created")
+        """
+        # Try to get existing
+        obj = self.first(db, filters=filters)
+
+        if obj:
+            return obj, False
+
+        # Create new
+        create_data = {**(defaults or {}), **filters}
+        obj = self.create(db, create_data)
+        return obj, True
+
+    def update_or_create(
+        self,
+        db: Session,
+        filters: Dict[str, Any],
+        defaults: Dict[str, Any]
+    ) -> tuple[ModelType, bool]:
+        """
+        Update existing record or create new one (upsert)
+
+        Args:
+            db: Database session
+            filters: Filter criteria for lookup
+            defaults: Values to set (for both update and create)
+
+        Returns:
+            Tuple of (model_instance, created)
+            - created=True if new record was created
+            - created=False if existing record was updated
+
+        Example:
+            user, created = repo.update_or_create(
+                db,
+                filters={"u_email": "john@example.com"},
+                defaults={"u_name": "John Doe", "u_is_active": True}
+            )
+        """
+        obj = self.first(db, filters=filters)
+
+        if obj:
+            # Update existing
+            for field, value in defaults.items():
+                if hasattr(obj, field):
+                    setattr(obj, field, value)
+            db.add(obj)
+            db.commit()
+            db.refresh(obj)
+            return obj, False
+
+        # Create new
+        create_data = {**filters, **defaults}
+        obj = self.create(db, create_data)
+        return obj, True
+
+    def soft_delete(self, db: Session, id: Any, deleted_at_field: str = "deleted_at") -> Optional[ModelType]:
+        """
+        Soft delete record (set deleted_at timestamp instead of removing)
+
+        Args:
+            db: Database session
+            id: Primary key value
+            deleted_at_field: Name of the deleted_at column (default: "deleted_at")
+
+        Returns:
+            Soft-deleted model instance or None if not found
+
+        Note:
+            Requires model to have a deleted_at column
+
+        Example:
+            user = repo.soft_delete(db, user_id=1)
+        """
+        from datetime import datetime
+
+        if not hasattr(self.model, deleted_at_field):
+            raise AttributeError(f"Model {self.model.__name__} does not have field '{deleted_at_field}'")
+
+        pk_attr = getattr(self.model, self._pk_column)
+        obj = db.query(self.model).filter(pk_attr == id).first()
+
+        if obj:
+            setattr(obj, deleted_at_field, datetime.now())
+            db.add(obj)
+            db.commit()
+            db.refresh(obj)
+
+        return obj
+
+    def restore(self, db: Session, id: Any, deleted_at_field: str = "deleted_at") -> Optional[ModelType]:
+        """
+        Restore soft-deleted record (set deleted_at to NULL)
+
+        Args:
+            db: Database session
+            id: Primary key value
+            deleted_at_field: Name of the deleted_at column (default: "deleted_at")
+
+        Returns:
+            Restored model instance or None if not found
+
+        Example:
+            user = repo.restore(db, user_id=1)
+        """
+        if not hasattr(self.model, deleted_at_field):
+            raise AttributeError(f"Model {self.model.__name__} does not have field '{deleted_at_field}'")
+
+        pk_attr = getattr(self.model, self._pk_column)
+        obj = db.query(self.model).filter(pk_attr == id).first()
+
+        if obj:
+            setattr(obj, deleted_at_field, None)
+            db.add(obj)
+            db.commit()
+            db.refresh(obj)
+
+        return obj

@@ -38,12 +38,12 @@ USAGE PATTERNS (in user project):
    ```
 """
 from contextlib import contextmanager
-from typing import Generator, Optional
+from typing import Generator, Optional, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 # Optional logger - will work without it
-logger: Optional['LoggerAdapter'] = None
+logger: Optional[Any] = None
 try:
     from atams.logging import get_logger
     logger = get_logger(__name__)
