@@ -350,4 +350,4 @@ MIT License - see LICENSE file for details.
 
 ## Support
 
-For support, email [support@gratiamanullang03@gmail.com](mailto:gratiamanullang03@gmail.com) or open an issue on GitHub.
+For support, email [gratiamanullang03@gmail.com](mailto:gratiamanullang03@gmail.com) or open an issue on GitHub.

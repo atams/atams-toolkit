@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 authors = [
-    {name = "ATAMS Team", email = "dev@atamsindonesia.com"}
+    {name = "ATAMS Team", email = "atamsindonesia@gmail.com"}
 ]
 keywords = ["fastapi", "toolkit", "aura", "atams", "framework", "boilerplate"]
 classifiers = [
