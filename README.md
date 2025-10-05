@@ -1,6 +1,6 @@
 # ATAMS - Advanced Toolkit for Application Management System
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.3-blue)
 ![Python](https://img.shields.io/badge/python-3.9+-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -332,11 +332,7 @@ ATAMS follows [Semantic Versioning](https://semver.org/):
 - **MINOR** version for new functionality (backwards compatible)
 - **PATCH** version for bug fixes
 
-Current version: **1.1.0**
-
-## Contributing
-
-Contributions welcome! Please read CONTRIBUTING.md first.
+Current version: **1.1.3**
 
 ## License
 
