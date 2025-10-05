@@ -189,6 +189,15 @@ class UserRepository(BaseRepository[User]):
 
 ### Using Atlas SSO
 
+Configure Atlas SSO in `.env`:
+```env
+ATLAS_SSO_URL=https://api.atlas-microapi.atamsindonesia.com/api/v1
+ATLAS_APP_CODE=your_app_code
+ATLAS_ENCRYPTION_KEY=your_encryption_key
+ATLAS_ENCRYPTION_IV=your_encryption_iv
+```
+
+Then use in endpoints:
 ```python
 from atams.sso import require_auth, require_min_role_level
 

@@ -146,17 +146,14 @@ class Settings(AtamsBaseSettings):
 
     Inherits from AtamsBaseSettings which includes:
     - DATABASE_URL (required)
-    - ATLAS_APP_CODE (required - get from Atlas SSO admin)
+    - ATLAS_SSO_URL, ATLAS_APP_CODE, ATLAS_ENCRYPTION_KEY, ATLAS_ENCRYPTION_IV
     - ENCRYPTION_ENABLED, ENCRYPTION_KEY, ENCRYPTION_IV (response encryption)
     - LOGGING_ENABLED, LOG_LEVEL, LOG_TO_FILE, LOG_FILE_PATH
     - CORS_ORIGINS, CORS_ALLOW_CREDENTIALS, CORS_ALLOW_METHODS, CORS_ALLOW_HEADERS
     - RATE_LIMIT_ENABLED, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW
     - DEBUG
 
-    Note: ATLAS_SSO_URL, ATLAS_ENCRYPTION_KEY, ATLAS_ENCRYPTION_IV are hardcoded
-    in ATAMS and cannot be overridden for security and consistency.
-
-    All other settings can be overridden via .env file or by redefining them here.
+    All settings can be overridden via .env file or by redefining them here.
     """
     APP_NAME: str = "{app_name}"
     APP_VERSION: str = "{app_version}"
@@ -203,9 +200,11 @@ DEBUG=true
 DATABASE_URL=postgresql://user:password@localhost/{project_name.replace('-', '_')}
 
 # Atlas SSO
-# Note: ATLAS_SSO_URL, ATLAS_ENCRYPTION_KEY, ATLAS_ENCRYPTION_IV are hardcoded in ATAMS
-# Only ATLAS_APP_CODE needs to be configured (get this from Atlas SSO admin)
+# Configure these based on your Atlas SSO environment (dev/staging/production)
+ATLAS_SSO_URL=https://api.atlas-microapi.atamsindonesia.com/api/v1
 ATLAS_APP_CODE={app_name.upper().replace(' ', '_')}
+ATLAS_ENCRYPTION_KEY=7c5f7132ba1a6e566bccc56416039bea
+ATLAS_ENCRYPTION_IV=ce84582d0e6d2591
 
 # Response Encryption (for GET endpoints)
 # IMPORTANT: Generate secure keys using:
