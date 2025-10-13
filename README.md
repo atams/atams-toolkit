@@ -1,6 +1,6 @@
 # ATAMS - Advanced Toolkit for Application Management System
 
-![Version](https://img.shields.io/badge/version-1.1.3-blue)
+![Version](https://img.shields.io/badge/version-1.1.4-blue)
 ![Python](https://img.shields.io/badge/python-3.9+-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -68,7 +68,7 @@ DELETE /api/v1/departments/{id}
 
 ### Core Components
 
-1. **Database Layer** - BaseRepository with ORM & Native SQL
+1. **Database Layer** - BaseRepository with ORM & Native SQL, configurable connection pooling
 2. **Atlas SSO** - Authentication & authorization
 3. **Response Encryption** - AES-256 for GET endpoints
 4. **Exception Handling** - Standardized error responses
@@ -76,6 +76,7 @@ DELETE /api/v1/departments/{id}
 6. **Logging** - Structured logging with JSON format
 7. **Transaction Management** - Context managers for complex operations
 8. **Common Schemas** - Response & pagination schemas
+9. **Health Check Endpoints** - Built-in monitoring endpoints with pool statistics
 
 ### Configuration
 
@@ -88,7 +89,7 @@ class Settings(AtamsBaseSettings):
     APP_NAME: str = "MyApp"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
-    
+
     # App-specific encryption
     ENCRYPTION_KEY: str = "your-key-32-chars"
     ENCRYPTION_IV: str = "your-iv-16-char"
@@ -102,6 +103,162 @@ Override via `.env`:
 
 ```env
 CORS_ORIGINS=["https://myapp.atamsindonesia.com"]
+```
+
+### Database Connection Pool Configuration
+
+**IMPORTANT:** ATAMS now has configurable connection pool settings to prevent "remaining connection slots" errors!
+
+**Default Settings (Conservative):**
+- `DB_POOL_SIZE=3` - Persistent connections
+- `DB_MAX_OVERFLOW=5` - Additional overflow connections
+- `DB_POOL_RECYCLE=3600` - Recycle connections after 1 hour
+- `DB_POOL_TIMEOUT=30` - Timeout waiting for connection
+- `DB_POOL_PRE_PING=True` - Health check before using
+
+**For Aiven Free Tier (20 connection limit):**
+
+Add to your `.env`:
+```env
+# Database connection pool settings
+DB_POOL_SIZE=3
+DB_MAX_OVERFLOW=5
+```
+
+This allows max 8 connections per app instance (3 + 5).
+
+**For Production (Higher limits):**
+
+If your database has `max_connections=100`, you can increase:
+```env
+DB_POOL_SIZE=10
+DB_MAX_OVERFLOW=20
+```
+
+**Calculate Your Pool Settings:**
+
+Use this formula:
+```
+Total Connections = (DB_POOL_SIZE + DB_MAX_OVERFLOW) × Number of App Instances
+```
+
+Ensure: `Total Connections < Database Connection Limit - 5` (reserve for admin/monitoring)
+
+**Example:**
+- Database limit: 20
+- Number of apps: 2
+- Pool size: `(3 + 5) × 2 = 16 connections` ✅ (safe, under 20)
+
+**Initialize Database with Custom Pool:**
+
+```python
+from atams.db import init_database
+from app.core.config import settings
+
+# Option 1: Use settings object (reads from .env)
+init_database(
+    settings.DATABASE_URL,
+    settings.DEBUG,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_recycle=settings.DB_POOL_RECYCLE,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
+    pool_pre_ping=settings.DB_POOL_PRE_PING
+)
+
+# Option 2: Explicit values
+init_database(
+    settings.DATABASE_URL,
+    settings.DEBUG,
+    pool_size=3,
+    max_overflow=5
+)
+```
+
+**Monitor Connection Pool:**
+
+```python
+from atams.db import get_pool_status, check_connection_health
+
+# Check pool status
+status = get_pool_status()
+print(f"Active: {status['checked_out']}/{status['pool_size']}")
+print(f"Total connections: {status['total_connections']}")
+
+# Health check
+if not check_connection_health():
+    print("Database connection issue!")
+```
+
+**Built-in Health Check Endpoints:**
+
+ATAMS now provides **automatic health check endpoints** that you can mount in your app!
+
+```python
+from fastapi import FastAPI
+from atams.api import health_router
+
+app = FastAPI()
+
+# Mount built-in health endpoints
+app.include_router(health_router, prefix="/health", tags=["Health"])
+```
+
+This provides **3 endpoints** automatically:
+
+1. **GET /health** - Basic application health
+   ```json
+   {
+     "status": "ok",
+     "timestamp": "2025-01-13T10:00:00"
+   }
+   ```
+
+2. **GET /health/db** - Database health with connection pool stats
+   ```json
+   {
+     "status": "ok",
+     "database": {
+       "connected": true,
+       "pool": {
+         "pool_size": 3,
+         "checked_in": 2,
+         "checked_out": 1,
+         "overflow": 0,
+         "total_connections": 3
+       }
+     },
+     "timestamp": "2025-01-13T10:00:00"
+   }
+   ```
+
+3. **GET /health/full** - Full system health check
+   ```json
+   {
+     "status": "ok",
+     "application": {
+       "status": "running",
+       "timestamp": "2025-01-13T10:00:00"
+     },
+     "database": {
+       "connected": true,
+       "pool": {...}
+     }
+   }
+   ```
+
+**Manual Usage (if needed):**
+
+```python
+from atams.db import get_pool_status, check_connection_health
+
+# Check pool status
+status = get_pool_status()
+print(f"Active: {status['checked_out']}/{status['pool_size']}")
+
+# Health check
+if not check_connection_health():
+    print("Database connection issue!")
 ```
 
 ## CLI Commands
@@ -332,7 +489,7 @@ ATAMS follows [Semantic Versioning](https://semver.org/):
 - **MINOR** version for new functionality (backwards compatible)
 - **PATCH** version for bug fixes
 
-Current version: **1.1.3**
+Current version: **1.1.4**
 
 ## License
 

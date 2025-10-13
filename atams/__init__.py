@@ -3,7 +3,7 @@ ATAMS - Advanced Toolkit for Application Management System
 Universal toolkit untuk semua AURA (Atams Universal Runtime Architecture) projects
 """
 
-__version__ = "1.1.3"
+__version__ = "1.1.4"
 
 # Export main components
 from atams.config import AtamsBaseSettings, get_database_url
@@ -22,6 +22,7 @@ from atams.exceptions import (
 )
 from atams.schemas import DataResponse, PaginationResponse, ResponseBase, ErrorResponse
 from atams.logging import setup_logging, setup_logging_from_settings, get_logger
+from atams.api import health_router
 
 __all__ = [
     # Version
@@ -36,6 +37,9 @@ __all__ = [
     "get_db",
     "init_database",
     "BaseRepository",
+
+    # API
+    "health_router",
 
     # Exceptions
     "AppException",

@@ -12,6 +12,17 @@ class AtamsBaseSettings(BaseSettings):
     # Database (required per app)
     DATABASE_URL: str
 
+    # Database Connection Pool Settings
+    # IMPORTANT: Tune these based on your database connection limit!
+    # For Aiven free tier (20 connections), use smaller values:
+    #   DB_POOL_SIZE=3, DB_MAX_OVERFLOW=5 (max 8 per app)
+    # For production with higher limits, increase accordingly
+    DB_POOL_SIZE: int = 3  # Number of persistent connections
+    DB_MAX_OVERFLOW: int = 5  # Additional connections when pool is full
+    DB_POOL_RECYCLE: int = 3600  # Recycle connections after 1 hour (prevent stale connections)
+    DB_POOL_TIMEOUT: int = 30  # Timeout waiting for connection (seconds)
+    DB_POOL_PRE_PING: bool = True  # Verify connection health before using
+
     # Atlas SSO Configuration
     # All configurable via .env untuk development flexibility
     ATLAS_SSO_URL: str = "https://api.atlas-microapi.atamsindonesia.com/api/v1"

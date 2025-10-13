@@ -82,6 +82,7 @@ from atams.db import init_database
 from atams.logging import setup_logging_from_settings
 from atams.middleware import RequestIDMiddleware
 from atams.exceptions import setup_exception_handlers
+from atams.api import health_router
 
 from app.core.config import settings
 from app.api.v1.api import api_router
@@ -89,8 +90,16 @@ from app.api.v1.api import api_router
 # Setup logging
 setup_logging_from_settings(settings)
 
-# Initialize database
-init_database(settings.DATABASE_URL, settings.DEBUG)
+# Initialize database with connection pool settings
+init_database(
+    settings.DATABASE_URL,
+    settings.DEBUG,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_recycle=settings.DB_POOL_RECYCLE,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
+    pool_pre_ping=settings.DB_POOL_PRE_PING
+)
 
 # Create FastAPI app
 app = FastAPI(
@@ -118,7 +127,8 @@ app.add_middleware(RequestIDMiddleware)
 # Exception handlers
 setup_exception_handlers(app)
 
-# Include API router
+# Include routers
+app.include_router(health_router, prefix="/health", tags=["Health"])
 app.include_router(api_router, prefix="/api/v1")
 
 
@@ -126,12 +136,6 @@ app.include_router(api_router, prefix="/api/v1")
 async def root():
     """API Root - Basic information"""
     return {{"name": settings.APP_NAME, "version": settings.APP_VERSION}}
-
-
-@app.get("/health", tags=["Health"])
-async def health():
-    """Health check endpoint"""
-    return {{"status": "ok"}}
 '''
     write_file(project_dir / "app" / "main.py", main_content)
     files_created.append("app/main.py")
@@ -198,6 +202,17 @@ DEBUG=true
 
 # Database
 DATABASE_URL=postgresql://user:password@localhost/{project_name.replace('-', '_')}
+
+# Database Connection Pool Settings
+# IMPORTANT: Tune based on your database connection limit!
+# For Aiven free tier (20 connections): DB_POOL_SIZE=3, DB_MAX_OVERFLOW=5 (max 8 per app)
+# For production (100+ connections): Increase accordingly
+# Formula: Total Connections = (DB_POOL_SIZE + DB_MAX_OVERFLOW) × Number of App Instances
+DB_POOL_SIZE=3
+DB_MAX_OVERFLOW=5
+DB_POOL_RECYCLE=3600
+DB_POOL_TIMEOUT=30
+DB_POOL_PRE_PING=true
 
 # Atlas SSO
 # Configure these based on your Atlas SSO environment (dev/staging/production)

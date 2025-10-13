@@ -5,6 +5,58 @@ All notable changes to the ATAMS toolkit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4] - 2025-01-13
+
+### Added
+- **Configurable Database Connection Pool Settings** to prevent "remaining connection slots" errors:
+  - Added `DB_POOL_SIZE` (default: 3) - Number of persistent connections
+  - Added `DB_MAX_OVERFLOW` (default: 5) - Additional overflow connections
+  - Added `DB_POOL_RECYCLE` (default: 3600) - Recycle connections after N seconds
+  - Added `DB_POOL_TIMEOUT` (default: 30) - Timeout waiting for connection
+  - Added `DB_POOL_PRE_PING` (default: True) - Health check before using connection
+  - All settings configurable via `.env` for flexibility across environments
+
+- **Connection Pool Monitoring Utilities**:
+  - `get_pool_status()` - Get real-time connection pool statistics
+  - `dispose_pool()` - Clean up all connections in pool
+  - `check_connection_health()` - Verify database connection health
+  - `get_connection_url_info()` - Get sanitized connection info (without password)
+
+- **Built-in Health Check Endpoints** (`atams.api.health_router`):
+  - `GET /health` - Basic application health check
+  - `GET /health/db` - Database health with connection pool statistics
+  - `GET /health/full` - Full system health check (app + database)
+  - Auto-mountable router for easy integration: `app.include_router(health_router, prefix="/health")`
+  - Returns proper HTTP status codes (200 OK, 503 Service Unavailable)
+
+### Changed
+- **BREAKING**: `init_database()` now accepts optional pool configuration parameters
+  - Backward compatible: existing code works with new conservative defaults
+  - Old hardcoded values (`pool_size=10, max_overflow=20`) replaced with configurable defaults
+  - `create_engine_from_settings()` now reads pool settings from `AtamsBaseSettings`
+
+- **Project Template Updates** (`atams init`):
+  - `.env.example` now includes all 5 DB pool settings with explanations
+  - `main.py` template auto-configures pool settings from `.env`
+  - Health check endpoints auto-mounted by default
+  - Apps created with `atams init` now have built-in monitoring out-of-the-box
+
+### Fixed
+- **Critical**: Fixed default pool settings causing connection exhaustion on free-tier databases
+  - Previous: `pool_size=10, max_overflow=20` (30 max per app) - too aggressive
+  - Current: `pool_size=3, max_overflow=5` (8 max per app) - safe for Aiven free tier (20 limit)
+  - Added `pool_recycle` to prevent stale connections
+  - Added `pool_timeout` to prevent indefinite waiting
+
+### Documentation
+- Added comprehensive "Database Connection Pool Configuration" section to README
+- Included formula for calculating pool settings based on database limits
+- Added examples for Aiven free tier and production environments
+- Added "Built-in Health Check Endpoints" section with 3 endpoint examples
+- Documented health router integration and response formats
+- Updated core components list to include health monitoring
+- Updated with connection pool monitoring best practices
+
 ## [1.1.3] - 2025-01-10
 
 ## [1.1.2] - 2025-01-10
